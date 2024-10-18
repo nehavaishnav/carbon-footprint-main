@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>CO2 Prediction App</title>
+</head>
+<body>
+    <h1>CO2 Emissions Prediction</h1>
+    <form action="{{ url_for('predict') }}" method="POST">
+        <!-- Existing form inputs -->
+        <label for="make">Make:</label>
+        <input type="text" id="make" name="make" required><br>
+
+        <label for="model">Model:</label>
+        <input type="text" id="model" name="model" required><br>
+
+        <label for="vehicle_class">Vehicle Class:</label>
+        <input type="text" id="vehicle_class" name="vehicle_class" required><br>
+
+        <label for="transmission">Transmission:</label>
+        <input type="text" id="transmission" name="transmission" required><br>
+
+        <label for="fuel_type">Fuel Type:</label>
+        <input type="text" id="fuel_type" name="fuel_type" required><br>
+
+        <label for="engine_size">Engine Size (L):</label>
+        <input type="text" id="engine_size" name="engine_size" required><br>
+
+        <label for="cylinders">Cylinders:</label>
+        <input type="number" id="cylinders" name="cylinders" required><br>
+
+        <label for="fuel_consumption_city">Fuel Consumption City (L/100 km):</label>
+        <input type="text" id="fuel_consumption_city" name="fuel_consumption_city" required><br>
+
+        <label for="fuel_consumption_hwy">Fuel Consumption Hwy (L/100 km):</label>
+        <input type="text" id="fuel_consumption_hwy" name="fuel_consumption_hwy" required><br>
+
+        <label for="fuel_consumption_comb">Fuel Consumption Comb (L/100 km):</label>
+        <input type="text" id="fuel_consumption_comb" name="fuel_consumption_comb" required><br>
+
+        <input type="submit" value="Predict">
+    </form>
+
+    {% if prediction %}
+    <h2>Predicted CO2 Emissions: {{ prediction }} g/km</h2>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #location, #distance, #totalEmissions {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #map {
+            height: 400px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Distance Traveled Tracker</h2>
+<button id="startTracking">Start Tracking Location</button>
+<div id="location">Location: Not tracked yet</div>
+<div id="distance">Distance traveled: 0 km</div>
+<div id="totalEmissions">Total Emissions: 0 g</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+// Haversine formula to calculate distance between two coordinates
+function haversineDistance(coords1, coords2) {
+    const toRad = (value) => (value * Math.PI) / 180; // Convert degrees to radians
+    const R = 6371; // Radius of the Earth in km
+
+    const lat1 = coords1.latitude;
+    const lon1 = coords1.longitude;
+    const lat2 = coords2.latitude;
+    const lon2 = coords2.longitude;
+
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in kilometers
+}
+
+let previousCoords = null;
+let totalDistance = 0;
+let totalEmissions = 0; // Initialize total emissions
+let prediction = {{ prediction | default(0) }}; // Get prediction from server
+let map;
+let marker;
+
+// Initialize Leaflet map
+function initMap() {
+    map = L.map('map').setView([0, 0], 13); // Initialize map with default center
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+}
+
+// Function to show the position and calculate distance and emissions
+function showPosition(position) {
+    const currentCoords = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+    };
+
+    document.getElementById("location").innerHTML = 
+        `Location: Latitude ${currentCoords.latitude}, Longitude ${currentCoords.longitude}`;
+
+    // Calculate distance if previous coordinates exist
+    if (previousCoords) {
+        const distance = haversineDistance(previousCoords, currentCoords);
+        totalDistance += distance;
+        document.getElementById("distance").innerHTML = `Distance traveled: ${totalDistance.toFixed(2)} km`;
+
+        // Calculate total emissions
+        totalEmissions = totalDistance * prediction; // emissions in grams
+        document.getElementById("totalEmissions").innerHTML = `Total Emissions: ${totalEmissions.toFixed(2)} g`;
+    }
+
+    // Update previous coordinates
+    previousCoords = currentCoords;
+
+    // Update marker and map view
+    if (marker) {
+        marker.setLatLng([currentCoords.latitude, currentCoords.longitude]);
+    } else {
+        marker = L.marker([currentCoords.latitude, currentCoords.longitude]).addTo(map);
+    }
+    map.setView([currentCoords.latitude, currentCoords.longitude], 13);
+    
+    // Get place name from OpenStreetMap using Nominatim API
+    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${currentCoords.latitude}&lon=${currentCoords.longitude}&format=json`)
+        .then(response => response.json())
+        .then(data => {
+            const placeName = data.display_name || "Unknown location";
+            document.getElementById("location").innerHTML = 
+                `Location: ${placeName} (Lat: ${currentCoords.latitude}, Lon: ${currentCoords.longitude})`;
+        });
+}
+
+// Function to start tracking user's location
+function watchUserPosition() {
+    if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(showPosition, showError);
+    } else {
+        document.getElementById("location").innerHTML = "Geolocation is not supported by this browser.";
+    }
+}
+
+// Function to handle errors
+function showError(error) {
+    switch(error.code) {
+        case error.PERMISSION_DENIED:
+            document.getElementById("location").innerHTML = "User denied the request for Geolocation.";
+            break;
+        case error.POSITION_UNAVAILABLE:
+            document.getElementById("location").innerHTML = "Location information is unavailable.";
+            break;
+        case error.TIMEOUT:
+            document.getElementById("location").innerHTML = "The request to get user location timed out.";
+            break;
+        case error.UNKNOWN_ERROR:
+            document.getElementById("location").innerHTML = "An unknown error occurred.";
+            break;
+    }
+}
+
+// Initialize map when the page loads
+window.onload = initMap;
+
+// Event listener for the button
+document.getElementById("startTracking").addEventListener("click", watchUserPosition);
+
+</script>
+    {% endif %}
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distance and Carbon Footprint Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            max-width: 400px;
+        }
+        input, select {
+            margin-bottom: 10px;
+            padding: 8px;
+            width: 100%;
+        }
+        button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h2>Calculate Distance and Carbon Footprint Between Two Places</h2>
+    <form id="distanceForm">
+        <label for="startPlace">Start Place:</label>
+        <input type="text" id="startPlace" placeholder="e.g., New York City" required>
+
+        <label for="endPlace">End Place:</label>
+        <input type="text" id="endPlace" placeholder="e.g., Los Angeles" required>
+
+        <label for="predictedEmission">Predicted Emission Factor (kg CO2/km):</label>
+        <input type="number" id="predictedEmission" placeholder="e.g., 0.12" step="0.01" required>
+
+        <button type="submit">Calculate</button>
+    </form>
+    
+    <div id="result"></div>
+
+    <script>
+        // Function to get coordinates for a place using OpenCage API
+        async function getCoordinates(place) {
+            const apiKey = 'd5f3c2b2ff084981a89f5ece0dfc2a36'; // Replace with your OpenCage API key
+            const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(place)}&key=${apiKey}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const data = await response.json();
+                if (data.results.length > 0) {
+                    const { lat, lng } = data.results[0].geometry;
+                    return { lat, lng };
+                } else {
+                    throw new Error("No results found.");
+                }
+            } catch (error) {
+                console.error("Error fetching data from OpenCage:", error);
+                return null;
+            }
+        }
+
+        // Function to get distance between two points using OSRM
+        async function getDistance(startCoords, endCoords) {
+            const url = `http://router.project-osrm.org/route/v1/driving/${startCoords.lng},${startCoords.lat};${endCoords.lng},${endCoords.lat}?overview=false`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const data = await response.json();
+                if (data.routes.length > 0) {
+                    return data.routes[0].distance; // Distance in meters
+                } else {
+                    throw new Error("No route found.");
+                }
+            } catch (error) {
+                console.error("Error fetching data from OSRM:", error);
+                return null;
+            }
+        }
+
+        // Function to calculate carbon footprint based on distance and predicted emission factor
+        function calculateCarbonFootprint(distance, predictedEmission) {
+            const distanceInKm = distance / 1000; // Convert meters to kilometers
+            const carbonFootprint = (distanceInKm * predictedEmission).toFixed(2); // kg CO2
+            return carbonFootprint; // Carbon footprint in kg CO2
+        }
+
+        // Event listener for form submission
+        document.getElementById('distanceForm').addEventListener('submit', async function (event) {
+            event.preventDefault(); // Prevent the default form submission
+            const startPlace = document.getElementById('startPlace').value.trim();
+            const endPlace = document.getElementById('endPlace').value.trim();
+            const predictedEmission = parseFloat(document.getElementById('predictedEmission').value.trim());
+
+            const startCoords = await getCoordinates(startPlace);
+            const endCoords = await getCoordinates(endPlace);
+            const resultDiv = document.getElementById('result');
+
+            if (startCoords && endCoords) {
+                const distance = await getDistance(startCoords, endCoords);
+                if (distance !== null) {
+                    const carbonFootprint = calculateCarbonFootprint(distance, predictedEmission);
+                    resultDiv.innerHTML = `Distance: ${(distance / 1000).toFixed(2)} km<br>Predicted Carbon Footprint: ${carbonFootprint} kg CO2`;
+                } else {
+                    resultDiv.innerHTML = 'Error calculating distance. Please try again.';
+                }
+            } else {
+                resultDiv.innerHTML = 'Error fetching coordinates. Please check the place names.';
+            }
+        });
+    </script>
+</body>
+</html>
+

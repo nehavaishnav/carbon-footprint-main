@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distance Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            max-width: 400px;
+        }
+        input {
+            margin-bottom: 10px;
+            padding: 8px;
+            width: 100%;
+        }
+        button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h2>Calculate Distance Between Two Places</h2>
+    <form id="distanceForm">
+        <label for="startPlace">Start Place:</label>
+        <input type="text" id="startPlace" placeholder="e.g., New York City" required>
+
+        <label for="endPlace">End Place:</label>
+        <input type="text" id="endPlace" placeholder="e.g., Los Angeles" required>
+
+        <button type="submit">Calculate Distance</button>
+    </form>
+    
+    <div id="result"></div>
+
+    <script>
+        // Function to get coordinates for a place using OpenCage API
+        
+        async function getCoordinates(place) {
+            const apiKey = 'd5f3c2b2ff084981a89f5ece0dfc2a36 '; // Replace with your OpenCage API key
+            const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(place)}&key=${apiKey}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const data = await response.json();
+                if (data.results.length > 0) {
+                    const { lat, lng } = data.results[0].geometry;
+                    return { lat, lng };
+                } else {
+                    throw new Error("No results found.");
+                }
+            } catch (error) {
+                console.error("Error fetching data from OpenCage:", error);
+                return null;
+            }
+        }
+
+        // Function to get distance between two points using OSRM
+        async function getDistance(startCoords, endCoords) {
+            const url = `http://router.project-osrm.org/route/v1/driving/${startCoords.lng},${startCoords.lat};${endCoords.lng},${endCoords.lat}?overview=false`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const data = await response.json();
+                if (data.routes.length > 0) {
+                    return data.routes[0].distance; // Distance in meters
+                } else {
+                    throw new Error("No route found.");
+                }
+            } catch (error) {
+                console.error("Error fetching data from OSRM:", error);
+                return null;
+            }
+        }
+
+        // Event listener for form submission
+        document.getElementById('distanceForm').addEventListener('submit', async function (event) {
+            event.preventDefault(); // Prevent the default form submission
+            const startPlace = document.getElementById('startPlace').value.trim();
+            const endPlace = document.getElementById('endPlace').value.trim();
+
+            const startCoords = await getCoordinates(startPlace);
+            const endCoords = await getCoordinates(endPlace);
+            const resultDiv = document.getElementById('result');
+
+            if (startCoords && endCoords) {
+                const distance = await getDistance(startCoords, endCoords);
+                if (distance !== null) {
+                    resultDiv.innerHTML = `Distance: ${(distance / 1000).toFixed(2)} km`; // Convert to kilometers
+                } else {
+                    resultDiv.innerHTML = 'Error calculating distance. Please try again.';
+                }
+            } else {
+                resultDiv.innerHTML = 'Error fetching coordinates. Please check the place names.';
+            }
+        });
+    </script>
+</body>
+</html>

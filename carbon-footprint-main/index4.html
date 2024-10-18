@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carbon Footprint Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        label {
+            font-weight: bold;
+        }
+        input, select, button {
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%;
+            max-width: 300px;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Carbon Footprint Calculator</h1>
+
+    <label for="carModel">Car Model:</label>
+    <input type="text" id="carModel" placeholder="e.g. Honda Civic">
+
+    <label for="engineType">Engine Type:</label>
+    <select id="engineType">
+        <option value="petrol">Petrol</option>
+        <option value="diesel">Diesel</option>
+        <option value="hybrid">Hybrid</option>
+        <option value="electric">Electric</option>
+    </select>
+
+    <button onclick="getEmissionFactor()">Get Emission Factor</button>
+
+    <div id="result"></div>
+
+    <script>
+        function getEmissionFactor() {
+            const carModel = document.getElementById('carModel').value;
+            const engineType = document.getElementById('engineType').value;
+
+            if (!carModel) {
+                alert("Please enter a car model.");
+                return;
+            }
+
+            // Make a request to the Flask backend on localhost:5000
+            const url = `http://127.0.0.1:5000/get_emission_factor?car_model=${encodeURIComponent(carModel)}&engine_type=${encodeURIComponent(engineType)}`;
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const resultDiv = document.getElementById('result');
+                    if (data.error) {
+                        resultDiv.innerHTML = `<strong>Error:</strong> ${data.error}`;
+                        resultDiv.style.color = 'red';
+                    } else {
+                        resultDiv.innerHTML = `<strong>Emission Factor:</strong> ${data.emission_factor} g/km`;
+                        resultDiv.style.color = 'green';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('result').innerHTML = 'An error occurred while fetching data.';
+                });
+        }
+    </script>
+</body>
+</html>
